@@ -79,26 +79,21 @@ int main(int argc, char **argv) {
     if (connectResult < 0) perrorExit("Connect error");
     else                   printf("Connection established.\n");
 
-    // Setup a buffer to recieve bytes
-    char buf[MAX_BUF];
-    bzero(&buf, sizeof(buf));
-
     // Send a request for bytes from file specified at commandline
     size_t bytesSent = sendto(sock, fileOption, strlen(fileOption), 0,
         (struct sockaddr *)&senderAddr, sizeof(senderAddr));
-    if (bytesSent >= 0) {
-        printf("Sent %d bytes: %s\n", (int)bytesSent, fileOption);
-    } else {
-        perrorExit("Send error");
-    }
+    if (bytesSent < 0) perrorExit("Send error");
+    else               printf("Sent %d bytes: %s\n", (int)bytesSent, fileOption);
 
     // Receive bytes back from the sender
+    char buf[MAX_BUF]; 
+    bzero(&buf, sizeof(buf));
     size_t bytesRecvd = recvfrom(sock, buf, MAX_BUF, 0, NULL, NULL);
-    if (bytesRecvd >= 0) {
-        printf("Received %d bytes: %s\n", (int)bytesRecvd, buf);
-    } else {
-        perrorExit("Receive error");
-    }
+    if (bytesRecvd < 0) perrorExit("Receive error");
+    else                printf("Received %d bytes: %s\n", (int)bytesRecvd, buf);
+
+    // Clear buffer if it will be used again
+    //bzero(&buf, sizeof(buf));
 
     // Got what we came for, shut it down
     if (close(sock) < 0) perrorExit("Close error");

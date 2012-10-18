@@ -107,8 +107,10 @@ int main(int argc, char **argv) {
     bzero(&buf, sizeof(buf));
 
     // Get the filename to open from the requester
-    recvfrom(sock, buf, MAX_BUF, 0,
+    size_t recvResult = recvfrom(sock, buf, MAX_BUF, 0,
         (struct sockaddr *)&requesterAddr, &len);
+    if (recvResult < 0) perror("Receive error");
+    else                printf("Received %d bytes: %s\n", (int)recvResult, buf);
 
     // Open the requested file and read in the bytes
     int file = open(buf, O_RDONLY);
@@ -117,16 +119,17 @@ int main(int argc, char **argv) {
     read(file, buf, MAX_BUF);
 
     // Send the bytes back to the requester
-    sendto(sock, buf, strlen(buf), 0,
+    size_t sendResult = sendto(sock, buf, strlen(buf), 0,
         (struct sockaddr *)&requesterAddr, sizeof(requesterAddr));
+    if (sendResult < 0) perrorExit("Send error");
+    else                printf("Sent %d bytes: %s\n", (int)sendResult, buf);
 
-    // Print the bytes that were just sent
-    printf("Data sent to requester: %s\n", buf);
-    //bzero(&buf, sizeof(buf)); // clear if using buffer again
+    // Clear buffer if it will be used again
+    //bzero(&buf, sizeof(buf));
 
     // Got what we came for, shut it down
-    close(sock);
-    puts("Connection closed.\n");
+    if (close(sock) < 0) perrorExit("Close error");
+    else                 puts("Connection closed.\n");
 
     exit(EXIT_SUCCESS);
 }
