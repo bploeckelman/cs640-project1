@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-c -Wall
+CFLAGS=-c -Wall -std=gnu99 
 
 all: requester sender
 
@@ -9,7 +9,7 @@ requester: requester.o
 	$(CC) -o $@ $<;                \
 	echo "  [complete]"
 
-sender: sender.c
+sender: sender.o
 	@echo "Building sender..."; \
 	$(CC) -o $@ $<;             \
 	echo "  [complete]"
@@ -21,7 +21,7 @@ requester.o: requester.c
 
 sender.o: sender.c
 	@echo "Compiling sender.c..."; \
-	$(CC) $(CFLAGS) -o $@ $<;         \
+	$(CC) $(CFLAGS) -o $@ $<;      \
 	echo "  [complete]"
 
 clean:
