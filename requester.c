@@ -13,13 +13,14 @@
 #include <arpa/inet.h>
 
 #include "utilities.h"
+#include "tracker.h"
 
 #define LOOPBACK "127.0.0.1"
 #define MAX_BUF 1024
 
 
 int main(int argc, char **argv) {
-    if (argc < 4) {
+    if (argc != 5) {
         printf("usage: requester -p <port> -o <file option>\n");
         exit(1);
     }
@@ -51,6 +52,12 @@ int main(int argc, char **argv) {
 
     printf("Port: %s\n", portStr);
     printf("File: %s\n", fileOption);
+
+    // ------------------------------------------------------------------------
+
+    // TODO: write some code to traverse the lists and free memory
+    struct file_info *files = parseTracker();
+    printFileInfo(files); // DEBUG
 
     // ------------------------------------------------------------------------
     // Convert program args to values
