@@ -3,7 +3,7 @@ CFLAGS=-Wall -std=gnu99 -ggdb3
 
 all: requester sender
 
-requester: requester.c tracker.c utilities.c
+requester: requester.c tracker.c utilities.c packet.c
 	@echo "Building requester..."; \
 	$(CC) $(CFLAGS) -o $@ $^;      \
 	echo "  [complete]"

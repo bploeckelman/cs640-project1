@@ -6,14 +6,17 @@
 #include <time.h>
 #include <strings.h>
 #include <string.h>
+#include <assert.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 
 #include "utilities.h"
 #include "tracker.h"
+#include "packet.h"
 
 #define LOOPBACK "127.0.0.1"
 #define MAX_BUF 1024
@@ -53,15 +56,6 @@ int main(int argc, char **argv) {
     printf("Port: %s\n", portStr);
     printf("File: %s\n", fileOption);
 
-    // ------------------------------------------------------------------------
-
-    // Parse the tracker file for parts corresponding to the specified file
-    struct file_info *fileParts = parseTracker(fileOption);
-    // TODO: use this file info to request the parts
-    //       of the file from the appropriate sender
-    freeFileInfo(fileParts); // ...but for now just free it
-
-    // ------------------------------------------------------------------------
     // Convert program args to values
     int requesterPort = atoi(portStr);
 
@@ -69,45 +63,87 @@ int main(int argc, char **argv) {
     if (requesterPort <= 1024 || requesterPort >= 65536)
         ferrorExit("Invalid requester port");
 
-    // Create a socket
-    int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0) perrorExit("Socket error");
-    else          printf("Created socket.\n");
+    // ------------------------------------------------------------------------
 
-    // Setup the sender address structure
-    struct sockaddr_in senderAddr;
-    bzero((char *)&senderAddr, sizeof(senderAddr));
-    senderAddr.sin_family = AF_INET;
-    senderAddr.sin_port = htons(requesterPort);
-    //senderAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    inet_aton(LOOPBACK, &senderAddr.sin_addr);
+    // Parse the tracker file for parts corresponding to the specified file
+    struct file_info *fileParts = parseTracker(fileOption);
+    assert(fileParts != NULL && "Invalid file_info struct");
 
-    // Connect to the sender
-    int connectResult = connect(sock,
-        (struct sockaddr *)&senderAddr, sizeof(senderAddr));
-    if (connectResult < 0) perrorExit("Connect error");
-    else                   printf("Connection established.\n");
+    // Setup structs for getaddrinfo
+    struct addrinfo hints;
+    bzero(&hints, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_flags = 0;
+    hints.ai_protocol = 0;
 
-    // Send a request for bytes from file specified at commandline
-    size_t bytesSent = sendto(sock, fileOption, strlen(fileOption), 0,
-        (struct sockaddr *)&senderAddr, sizeof(senderAddr));
-    if (bytesSent < 0) perrorExit("Send error");
-    else               printf("Sent %d bytes: %s\n", (int)bytesSent, fileOption);
+    struct file_part *part = fileParts->parts;
+    char senderPortStr[6] = "\0\0\0\0\0\0";
+    sprintf(senderPortStr, "%d", part->sender_port);
 
-    // Receive bytes back from the sender
-    char buf[MAX_BUF]; 
-    bzero(&buf, sizeof(buf));
-    size_t bytesRecvd = recvfrom(sock, buf, MAX_BUF, 0, NULL, NULL);
-    if (bytesRecvd < 0) perrorExit("Receive error");
-    else                printf("Received %d bytes: %s\n", (int)bytesRecvd, buf);
+    struct addrinfo *result, *rp;
+    int errcode = getaddrinfo(part->sender_hostname, senderPortStr, &hints, &result);
+    if (errcode != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
+        exit(EXIT_FAILURE);
+    }
 
-    // Clear buffer if it will be used again
-    //bzero(&buf, sizeof(buf));
+    // Try each address from getaddrinfo until connect
+    int sockfd;
+    for(rp = result; rp != NULL; rp = rp->ai_next) {
+        sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (sockfd == -1)
+            continue;
+        if (connect(sockfd, rp->ai_addr, rp->ai_addrlen) != -1)
+            break; // connected!
+        close(sockfd);
+    }
+    if (rp == NULL) ferrorExit("Connect error");
+    freeaddrinfo(result);
+
+    // Construct a packet
+    struct packet *pkt = malloc(sizeof(struct packet));
+    bzero(pkt, sizeof(struct packet));
+    pkt->type = 'R';
+    pkt->seq  = part->id;
+    pkt->len  = strlen(fileOption) + 1;
+    strcpy(pkt->payload, fileOption);
+
+    // Send the packet
+    size_t bytesSent = send(sockfd, serializePacket(pkt), sizeof(struct packet), 0);
+    if (bytesSent == -1)
+        perrorExit("Send error");
+    else
+        printf("Sent %lu payload bytes: \"%s\"\n", pkt->len, pkt->payload);
+    free(pkt);
+
+    // Receive a response
+    void *msg = NULL;
+    size_t bytesRecvd = recv(sockfd, msg, sizeof(struct packet), 0);
+    if (bytesRecvd == -1) perrorExit("Receive error");
+
+    // Deserialize the response
+    pkt = malloc(sizeof(struct packet));
+    bzero(pkt, sizeof(struct packet));
+    deserializePacket(msg, pkt);
+    printf("Received %lu payload bytes.\n", pkt->len);
+
+    // Print the response packet values
+    printf("Response Packet:\n");
+    printf("  type = %c\n", pkt->type);
+    printf("  seq  = %lu\n", pkt->seq);
+    printf("  len  = %lu\n", pkt->len);
+    printf("  data = %s\n", pkt->payload);
+
+    // Cleanup
+    free(msg);
+    free(pkt);
 
     // Got what we came for, shut it down
-    if (close(sock) < 0) perrorExit("Close error");
-    else                 puts("Connection closed.\n");
+    if (close(sockfd) == -1) perrorExit("Close error");
+    else                     puts("Connection closed.\n");
 
+    freeFileInfo(fileParts);
     exit(EXIT_SUCCESS);
 }
 
