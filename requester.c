@@ -18,17 +18,14 @@
 #include "tracker.h"
 #include "packet.h"
 
-#define LOOPBACK "127.0.0.1"
-#define MAX_BUF 1024
-
 
 int main(int argc, char **argv) {
+    // ------------------------------------------------------------------------
+    // Handle commandline arguments
     if (argc != 5) {
         printf("usage: requester -p <port> -o <file option>\n");
         exit(1);
     }
-
-    // ------------------------------------------------------------------------
 
     char *portStr    = NULL;
     char *fileOption = NULL;
@@ -53,6 +50,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    // DEBUG
     printf("Port: %s\n", portStr);
     printf("File: %s\n", fileOption);
 
@@ -69,81 +67,105 @@ int main(int argc, char **argv) {
     struct file_info *fileParts = parseTracker(fileOption);
     assert(fileParts != NULL && "Invalid file_info struct");
 
-    // Setup structs for getaddrinfo
+    // ------------------------------------------------------------------------
+    // TODO: this will eventually be moved into the send/recv loop
+    // Setup sender address info 
     struct addrinfo hints;
     bzero(&hints, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET;
+    hints.ai_family   = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = 0;
-    hints.ai_protocol = 0;
+    hints.ai_flags    = 0;
 
+    // Convert the sender's port # to a string
     struct file_part *part = fileParts->parts;
     char senderPortStr[6] = "\0\0\0\0\0\0";
     sprintf(senderPortStr, "%d", part->sender_port);
 
-    struct addrinfo *result, *rp;
-    int errcode = getaddrinfo(part->sender_hostname, senderPortStr, &hints, &result);
+    // Get the sender's address info
+    struct addrinfo *senderinfo, *p;
+    int errcode = getaddrinfo(part->sender_hostname, senderPortStr, &hints, &senderinfo);
     if (errcode != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
         exit(EXIT_FAILURE);
     }
 
-    // Try each address from getaddrinfo until connect
+    // Loop through all the results of getaddrinfo and try to create a socket
     int sockfd;
-    for(rp = result; rp != NULL; rp = rp->ai_next) {
-        sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (sockfd == -1)
+    for(p = senderinfo; p != NULL; p = p->ai_next) {
+        sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+        if (sockfd == -1) {
+            perror("Socket error");
             continue;
-        if (connect(sockfd, rp->ai_addr, rp->ai_addrlen) != -1)
-            break; // connected!
-        close(sockfd);
+        }
+
+        break;
     }
-    if (rp == NULL) ferrorExit("Connect error");
-    freeaddrinfo(result);
+    if (p == NULL) perrorExit("Socket creation failed");
+    else           printNameInfo(p);
+    // ------------------------------------------------------------------------
 
-    // Construct a packet
-    struct packet *pkt = malloc(sizeof(struct packet));
-    bzero(pkt, sizeof(struct packet));
-    pkt->type = 'R';
-    pkt->seq  = part->id;
-    pkt->len  = strlen(fileOption) + 1;
-    strcpy(pkt->payload, fileOption);
+    // Start sending and receiving packets
+    struct packet *pkt = NULL;
+    time_t t = time(NULL);
 
-    // Send the packet
-    size_t bytesSent = send(sockfd, serializePacket(pkt), sizeof(struct packet), 0);
-    if (bytesSent == -1)
-        perrorExit("Send error");
-    else
-        printf("Sent %lu payload bytes: \"%s\"\n", pkt->len, pkt->payload);
-    free(pkt);
+    for (;;) {
+        // For now only send a test request packet every 2 seconds
+        if (difftime(time(NULL), t) > 2) {
+            t = time(NULL);
+        } else continue;
 
-    // Receive a response
-    void *msg = NULL;
-    size_t bytesRecvd = recv(sockfd, msg, sizeof(struct packet), 0);
-    if (bytesRecvd == -1) perrorExit("Receive error");
+        // Construct a request packet
+        pkt = malloc(sizeof(struct packet));
+        bzero(pkt, sizeof(struct packet));
+        pkt->type = 'R';
+        pkt->seq  = 0; // 0 for request pkts, otherwise: part->id;
+        pkt->len  = strlen(fileOption) + 1;
+        strcpy(pkt->payload, fileOption);
 
-    // Deserialize the response
-    pkt = malloc(sizeof(struct packet));
-    bzero(pkt, sizeof(struct packet));
-    deserializePacket(msg, pkt);
-    printf("Received %lu payload bytes.\n", pkt->len);
+        // Send the serialized request packet
+        size_t bytesSent = sendto(sockfd, serializePacket(pkt),
+            sizeof(struct packet), 0, p->ai_addr, p->ai_addrlen);
+        if (bytesSent == -1)
+            perrorExit("Send error");
+        else {
+            printf("[Sent %lu payload bytes]\n", pkt->len);
+            printf("  payload: \"%s\"\n", pkt->payload);
+            printf("Requester waiting for response...\n");
+        }
 
-    // Print the response packet values
-    printf("Response Packet:\n");
-    printf("  type = %c\n", pkt->type);
-    printf("  seq  = %lu\n", pkt->seq);
-    printf("  len  = %lu\n", pkt->len);
-    printf("  data = %s\n", pkt->payload);
+        // Receive a response message 
+        void *msg = malloc(sizeof(struct packet));
+        size_t bytesRecvd = recv(sockfd, msg, sizeof(struct packet), 0);
+        if (bytesRecvd == -1) perrorExit("Receive error");
 
-    // Cleanup
-    free(msg);
-    free(pkt);
+        // Deserialize the response message into a packet
+        pkt = malloc(sizeof(struct packet));
+        bzero(pkt, sizeof(struct packet));
+        deserializePacket(msg, pkt);
+
+        // Print the response packet values
+        printf("[Received %lu payload bytes]\n", pkt->len);
+        printf("  Response Packet:\n");
+        printf("    type = %c\n", pkt->type);
+        printf("    seq  = %lu\n", pkt->seq);
+        printf("    len  = %lu\n", pkt->len);
+        printf("    data = %s\n", pkt->payload);
+        puts("");
+
+        // Cleanup packets
+        free(msg);
+        free(pkt);
+   }
 
     // Got what we came for, shut it down
     if (close(sockfd) == -1) perrorExit("Close error");
     else                     puts("Connection closed.\n");
 
+    // Cleanup address and file info data 
+    freeaddrinfo(senderinfo);
     freeFileInfo(fileParts);
+
+    // All done!
     exit(EXIT_SUCCESS);
 }
 

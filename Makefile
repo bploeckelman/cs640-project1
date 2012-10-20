@@ -8,7 +8,7 @@ requester: requester.c tracker.c utilities.c packet.c
 	$(CC) $(CFLAGS) -o $@ $^;      \
 	echo "  [complete]"
 
-sender: sender.c utilities.c
+sender: sender.c utilities.c packet.c
 	@echo "Building sender..."; \
 	$(CC) $(CFLAGS) -o $@ $^;   \
 	echo "  [complete]"

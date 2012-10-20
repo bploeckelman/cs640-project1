@@ -1,6 +1,16 @@
 #ifndef _UTILITIES_H_
 #define _UTILITIES_H_
 
+#include <netdb.h>
+
+#define LOOPBACK "127.0.0.1"
+
+
+// ----------------------------------------------------------------------------
+// Print hostname and port to stdout
+// ----------------------------------------------------------------------------
+void printNameInfo(struct addrinfo *addr);
+
 // ----------------------------------------------------------------------------
 // Print error from errno and exit with a failure indication
 // ----------------------------------------------------------------------------

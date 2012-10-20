@@ -12,20 +12,20 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 
 #include "utilities.h"
-
-#define LOOPBACK "127.0.0.1"
-#define MAX_BUF 1024
+#include "packet.h"
 
 
 int main(int argc, char **argv) {
+    // ------------------------------------------------------------------------
+    // Handle commandline arguments
     if (argc < 11) {
-        printf("usage: sender -p <port> -g <requester port> -r <rate> -q <seq_no> -l <length>\n");
+        printf("usage: sender -p <port> -g <requester port> ");
+        printf("-r <rate> -q <seq_no> -l <length>\n");
         exit(1);
     }
-
-    // ------------------------------------------------------------------------
 
     char *portStr    = NULL;
     char *reqPortStr = NULL;
@@ -63,8 +63,6 @@ int main(int argc, char **argv) {
     printf("Sequence #     : %s\n", seqNumStr);
     printf("Length         : %s\n", lenStr);
 
-    // ------------------------------------------------------------------------
-
     // Convert program args to values
     int senderPort    = atoi(portStr);
     int requesterPort = atoi(reqPortStr);
@@ -78,59 +76,108 @@ int main(int argc, char **argv) {
     if (requesterPort <= 1024 || requesterPort >= 65536)
         ferrorExit("Invalid requester port");
 
-    // Create a socket
-    int sock = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sock < 0) perrorExit("Socket error");
-    else          printf("Created socket.\n");
+    // ------------------------------------------------------------------------
 
-    // Setup the sender address structure
-    struct sockaddr_in senderAddr;
-    bzero((char *)&senderAddr, sizeof(senderAddr));
-    senderAddr.sin_family = AF_INET;
-    senderAddr.sin_port = htons(senderPort);
-    //senderAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    inet_aton(LOOPBACK, &senderAddr.sin_addr);
+    // Setup sender address info
+    struct addrinfo hints;
+    bzero(&hints, sizeof(struct addrinfo));
+    hints.ai_family   = AF_INET;
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_flags    = 0;
 
-    // Bind the socket to the sender address
-    int bindResult = bind(sock,
-        (struct sockaddr *)&senderAddr, sizeof(senderAddr));
-    if (bindResult < 0) perrorExit("Bind error");
-    else                printf("Bound socket to sender address.\n");
+    // Get the sender's address info
+    struct addrinfo *senderinfo, *p;
+    int errcode = getaddrinfo(NULL, portStr, &hints, &senderinfo);
+    if (errcode != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
+        exit(EXIT_FAILURE);
+    }
+
+    // Loop through all the getaddrinfo results and bind the first usable one
+    int sockfd;
+    for(p = senderinfo; p != NULL; p = p->ai_next) {
+        // Try to create a socket
+        sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+        if (sockfd == -1) {
+            perror("Socket error");
+            continue;
+        }
+
+        // Try to bind the socket
+        if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+            perror("Bind error");
+            close(sockfd);
+            continue;
+        }
+
+        break;
+    }
+    if (p == NULL) perrorExit("Bind failed"); 
+    else           printNameInfo(p);
+
+    // ------------------------------------------------------------------------
+    puts("Sender waiting for request packet...");
 
     // Setup the requester address structure
-    struct sockaddr_in requesterAddr;
-    bzero((char *)&requesterAddr, sizeof(requesterAddr));
-    socklen_t len = sizeof(requesterAddr);
+    struct sockaddr_storage requesterAddr;
+    bzero(&requesterAddr, sizeof(requesterAddr));
+    socklen_t len = sizeof(struct sockaddr_storage);
 
-    // Setup a byte buffer
-    char buf[MAX_BUF];
-    bzero(&buf, sizeof(buf));
+    // TODO: sender start by waiting for a request packet, 
+    //       once it gets one, sender should try to open the 
+    //       file part, chunk it into packets, send those 
+    //       to the requester, and send an END packet when done
 
-    // Get the filename to open from the requester
-    size_t recvResult = recvfrom(sock, buf, MAX_BUF, 0,
-        (struct sockaddr *)&requesterAddr, &len);
-    if (recvResult < 0) perror("Receive error");
-    else                printf("Received %d bytes: %s\n", (int)recvResult, buf);
+    // Read packets and echo them back to sender
+    for (;;) {
+        // Receive a message
+        void *msg = malloc(sizeof(struct packet));
+        size_t bytesRecvd = recvfrom(sockfd, msg, sizeof(struct packet), 0,
+            (struct sockaddr *)&requesterAddr, &len);
+        if (bytesRecvd == -1) {
+            perror("Recvfrom error");
+            fprintf(stderr, "Failed/incomplete receive: ignoring\n");
+            continue;
+        }
 
-    // Open the requested file and read in the bytes
-    int file = open(buf, O_RDONLY);
-    if (file < 0) perror("Open error");
-    else          printf("File opened: %s\n", buf);
-    read(file, buf, MAX_BUF);
+        // Deserialize the message into a packet 
+        struct packet *pkt = malloc(sizeof(struct packet));
+        bzero(pkt, sizeof(struct packet));
+        deserializePacket(msg, pkt);
 
-    // Send the bytes back to the requester
-    size_t sendResult = sendto(sock, buf, strlen(buf), 0,
-        (struct sockaddr *)&requesterAddr, sizeof(requesterAddr));
-    if (sendResult < 0) perrorExit("Send error");
-    else                printf("Sent %d bytes: %s\n", (int)sendResult, buf);
+        // TODO: get and print some statistics for the recvd packet
 
-    // Clear buffer if it will be used again
-    //bzero(&buf, sizeof(buf));
+        // Print the packet values
+        printf("[Received %lu payload bytes]\n", pkt->len);
+        printf("  Response Packet:\n");
+        printf("    type = %c\n", pkt->type);
+        printf("    seq  = %lu\n", pkt->seq);
+        printf("    len  = %lu\n", pkt->len);
+        printf("    data = %s\n", pkt->payload);
+        puts("");
+
+        // Send a response packet (just echo this one back for now)
+        if (sendto(sockfd, serializePacket(pkt), sizeof(struct packet), 0,
+            (struct sockaddr *)&requesterAddr, sizeof(struct sockaddr)) != bytesRecvd) {
+            perror("Sendto error");
+            fprintf(stderr, "Error sending response\n");
+        } else {
+            puts("[Sent response packet]\n");
+        }
+
+        // Cleanup packetse
+        free(pkt);
+        free(msg);
+    }
 
     // Got what we came for, shut it down
-    if (close(sock) < 0) perrorExit("Close error");
-    else                 puts("Connection closed.\n");
+    if (close(sockfd) == -1) perrorExit("Close error");
+    else                     puts("Connection closed.\n");
 
+    // Cleanup address info data
+    freeaddrinfo(senderinfo);
+
+    // All done!
     exit(EXIT_SUCCESS);
 }
 
