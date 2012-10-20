@@ -146,19 +146,15 @@ int main(int argc, char **argv) {
         deserializePacket(msg, pkt);
 
         // TODO: get and print some statistics for the recvd packet
-
-        // Print the packet values
-        printf("[Received %lu payload bytes]\n", pkt->len);
-        printf("  Response Packet:\n");
-        printf("    type = %c\n", pkt->type);
-        printf("    seq  = %lu\n", pkt->seq);
-        printf("    len  = %lu\n", pkt->len);
-        printf("    data = %s\n", pkt->payload);
-        puts("");
+        puts("[Received packet]");
+        printPacketInfo(pkt, &requesterAddr);
 
         // Send a response packet (just echo this one back for now)
-        if (sendto(sockfd, serializePacket(pkt), sizeof(struct packet), 0,
-            (struct sockaddr *)&requesterAddr, sizeof(struct sockaddr)) != bytesRecvd) {
+        size_t bytesSent = sendto(sockfd, serializePacket(pkt),
+                                  sizeof(struct packet), 0,
+                                  (struct sockaddr *)&requesterAddr,
+                                  sizeof(struct sockaddr));
+        if (bytesSent != bytesRecvd) {
             perror("Sendto error");
             fprintf(stderr, "Error sending response\n");
         } else {

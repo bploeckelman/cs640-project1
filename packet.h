@@ -1,6 +1,8 @@
 #ifndef _PACKET_H_
 #define _PACKET_H_
 
+#include <netinet/in.h>
+
 #define MAX_PAYLOAD 5000
 
 
@@ -16,6 +18,8 @@ void deserializePacket(void *msg, struct packet *pkt);
 
 void sendPacket(int sockfd, struct packet *pkt);
 void recvPacket(int sockfd, struct packet *pkt);
+
+void printPacketInfo(struct packet *pkt, struct sockaddr_storage *saddr);
 
 #endif
 

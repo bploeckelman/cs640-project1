@@ -143,14 +143,9 @@ int main(int argc, char **argv) {
         bzero(pkt, sizeof(struct packet));
         deserializePacket(msg, pkt);
 
-        // Print the response packet values
-        printf("[Received %lu payload bytes]\n", pkt->len);
-        printf("  Response Packet:\n");
-        printf("    type = %c\n", pkt->type);
-        printf("    seq  = %lu\n", pkt->seq);
-        printf("    len  = %lu\n", pkt->len);
-        printf("    data = %s\n", pkt->payload);
-        puts("");
+        // TODO: print some statistics about the packet
+        puts("[Received packet]");
+        printPacketInfo(pkt, (struct sockaddr_storage *)p->ai_addr);
 
         // Cleanup packets
         free(msg);

@@ -50,3 +50,27 @@ void recvPacket(int sockfd, struct packet *pkt) {
     // TODO
 }
 
+void printPacketInfo(struct packet *pkt, struct sockaddr_storage *saddr) {
+    if (pkt == NULL) {
+        fprintf(stderr, "Unable to print info for null packet\n");
+        return;
+    }
+
+    char *ipstr = ""; 
+    unsigned short ipport = 0;
+    if (saddr == NULL) {
+        fprintf(stderr, "Unable to print packet source from null sockaddr\n");
+    } else {
+        struct sockaddr_in *sin = (struct sockaddr_in *)saddr;
+        ipstr  = inet_ntoa(sin->sin_addr);
+        ipport = ntohs(sin->sin_port);
+    }
+
+    printf("  Packet from %s:%u (%lu payload bytes):\n",ipstr,ipport,pkt->len);
+    printf("    type = %c\n", pkt->type);
+    printf("    seq  = %lu\n", pkt->seq);
+    printf("    len  = %lu\n", pkt->len);
+    printf("    data = %s\n", pkt->payload);
+    puts("");
+}
+
