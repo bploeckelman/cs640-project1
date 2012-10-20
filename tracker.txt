@@ -1,3 +1,4 @@
 test.txt 2 localhost 5000
-test.txt 1 localhost 6000
-test.txt 3 localhost 7000
+test.txt 1 mumble-01 6000
+foo.txt 1 mumble-25 55555
+test.txt 3 mumble-10 7000

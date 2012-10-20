@@ -55,9 +55,11 @@ int main(int argc, char **argv) {
 
     // ------------------------------------------------------------------------
 
-    // TODO: write some code to traverse the lists and free memory
-    struct file_info *files = parseTracker();
-    printFileInfo(files); // DEBUG
+    // Parse the tracker file for parts corresponding to the specified file
+    struct file_info *fileParts = parseTracker(fileOption);
+    // TODO: use this file info to request the parts
+    //       of the file from the appropriate sender
+    freeFileInfo(fileParts); // ...but for now just free it
 
     // ------------------------------------------------------------------------
     // Convert program args to values

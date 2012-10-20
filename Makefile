@@ -1,27 +1,16 @@
 CC=gcc
-CFLAGS=-c -Wall -std=gnu99 -ggdb3
+CFLAGS=-Wall -std=gnu99 -ggdb3
 
 all: requester sender
 
-
-requester: requester.o
+requester: requester.c tracker.c utilities.c
 	@echo "Building requester..."; \
-	$(CC) -o $@ $<;                \
+	$(CC) $(CFLAGS) -o $@ $^;      \
 	echo "  [complete]"
 
-sender: sender.o
+sender: sender.c utilities.c
 	@echo "Building sender..."; \
-	$(CC) -o $@ $<;             \
-	echo "  [complete]"
-
-requester.o: requester.c
-	@echo "Compiling requester.c..."; \
-	$(CC) $(CFLAGS) -o $@ $<;         \
-	echo "  [complete]"
-
-sender.o: sender.c
-	@echo "Compiling sender.c..."; \
-	$(CC) $(CFLAGS) -o $@ $<;      \
+	$(CC) $(CFLAGS) -o $@ $^;   \
 	echo "  [complete]"
 
 clean:

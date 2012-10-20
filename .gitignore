@@ -2,5 +2,7 @@
 
 *.o
 
+tags
+
 requester
 sender
