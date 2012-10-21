@@ -11,6 +11,31 @@
 enum token { FILENAME, ID, SENDER_HOSTNAME, SENDER_PORT };
 
 
+void linkFilePart(struct file_info *info, struct file_part *part) {
+    struct file_part *curr = info->parts;
+    struct file_part *next;
+    if (info->parts == NULL) {
+        info->parts = part;
+        return;
+    }
+    else if (curr->id > part->id) {
+        part->next_part = curr;
+        info->parts = part;
+        return;
+    }
+    while (curr->next_part != NULL) {
+        next = curr->next_part;
+        if (next->id > part->id) {
+            part->next_part = next;
+            curr->next_part = part;
+            return;
+        }
+        curr = curr->next_part;
+    }
+    curr->next_part = part;
+    return;
+}
+
 // ----------------------------------------------------------------------------
 // Parse the tracker file.
 //   Builds a file_info struct for the specified file consisting of 
@@ -55,16 +80,7 @@ struct file_info *parseTracker(const char *filename) {
             part->sender_hostname = strdup(tokens[SENDER_HOSTNAME]);
 
             // Link it in to the list of file_parts for the file_info
-            if (info->parts == NULL) {
-                // Make this the start of a new list of file parts
-                info->parts = part;
-            } else {
-                // Add it to the list for this file_info
-                // TODO: link in proper position, ordered by part->id
-                struct file_part *p = info->parts;
-                while (p->next_part != NULL) p = p->next_part;
-                p->next_part = part;
-            }
+            linkFilePart(info, part);
         }
 
         // Get the next tracker line
@@ -131,4 +147,3 @@ void freeFileInfo(struct file_info *info) {
     free(info->filename);
     free(info);
 }
-
