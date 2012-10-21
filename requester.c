@@ -69,12 +69,52 @@ int main(int argc, char **argv) {
 
     // ------------------------------------------------------------------------
     // TODO: this will eventually be moved into the send/recv loop
-    // Setup sender address info 
-    struct addrinfo hints;
-    bzero(&hints, sizeof(struct addrinfo));
-    hints.ai_family   = AF_INET;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags    = 0;
+    // Setup requester address info 
+    struct addrinfo rhints;
+    bzero(&rhints, sizeof(struct addrinfo));
+    rhints.ai_family   = AF_INET;
+    rhints.ai_socktype = SOCK_DGRAM;
+    rhints.ai_flags    = 0;
+
+    // Get the requester's address info
+    struct addrinfo *requesterinfo;
+    int errcode = getaddrinfo(NULL, portStr, &rhints, &requesterinfo);
+    if (errcode != 0) {
+        fprintf(stderr, "requester getaddrinfo: %s\n", gai_strerror(errcode));
+        exit(EXIT_FAILURE);
+    }
+
+    // Loop through all the results of getaddrinfo and try to create a socket for requester
+    int reqsockfd;
+    struct addrinfo *rp;
+    for(rp = requesterinfo; rp != NULL; rp = rp->ai_next) {
+        // Try to create a new socket
+        reqsockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (reqsockfd == -1) {
+            perror("Socket error");
+            continue;
+        }
+
+        // Try to bind the socket
+        //*
+        if (bind(reqsockfd, rp->ai_addr, rp->ai_addrlen) == -1) {
+            perror("Bind error");
+            close(reqsockfd);
+            continue;
+        }
+        //*/
+
+        break;
+    }
+    if (rp == NULL) perrorExit("Request socket creation failed");
+    else            { printf("Requester socket: "); printNameInfo(rp); }
+
+    // Sender hints TODO: move into part loop
+    struct addrinfo shints;
+    bzero(&shints, sizeof(struct addrinfo));
+    shints.ai_family   = AF_INET;
+    shints.ai_socktype = SOCK_DGRAM;
+    shints.ai_flags    = 0;
 
     // Convert the sender's port # to a string
     struct file_part *part = fileParts->parts;
@@ -82,26 +122,27 @@ int main(int argc, char **argv) {
     sprintf(senderPortStr, "%d", part->sender_port);
 
     // Get the sender's address info
-    struct addrinfo *senderinfo, *p;
-    int errcode = getaddrinfo(part->sender_hostname, senderPortStr, &hints, &senderinfo);
+    struct addrinfo *senderinfo;
+    errcode = getaddrinfo(part->sender_hostname, senderPortStr, &shints, &senderinfo);
     if (errcode != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(errcode));
+        fprintf(stderr, "sender getaddrinfo: %s\n", gai_strerror(errcode));
         exit(EXIT_FAILURE);
     }
 
-    // Loop through all the results of getaddrinfo and try to create a socket
-    int sockfd;
-    for(p = senderinfo; p != NULL; p = p->ai_next) {
-        sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-        if (sockfd == -1) {
+    // Loop through all the results of getaddrinfo and try to create a socket for sender
+    int sendsockfd;
+    struct addrinfo *sp;
+    for(sp = senderinfo; sp != NULL; sp = sp->ai_next) {
+        sendsockfd = socket(sp->ai_family, sp->ai_socktype, sp->ai_protocol);
+        if (sendsockfd == -1) {
             perror("Socket error");
             continue;
         }
 
         break;
     }
-    if (p == NULL) perrorExit("Socket creation failed");
-    else           printNameInfo(p);
+    if (sp == NULL) perrorExit("Send socket creation failed");
+    else            { printf("Sender socket: "); printNameInfo(sp); }
     // ------------------------------------------------------------------------
 
     // Setup variables for statistics
@@ -119,18 +160,25 @@ int main(int argc, char **argv) {
     pkt->len  = strlen(fileOption) + 1;
     strcpy(pkt->payload, fileOption);
 
-    sendPacketTo(sockfd, pkt, p->ai_addr);
+    sendPacketTo(sendsockfd, pkt, sp->ai_addr);
 
     free(pkt);
 
     // ------------------------------------------------------------------------
     // TODO: connect to senders one at a time to get all parts
 
+    struct sockaddr_storage senderAddr;
+    bzero(&senderAddr, sizeof(struct sockaddr_storage));
+    socklen_t len = sizeof(senderAddr);
+
     // Start a recv loop here to get all packets for the given part
     for (;;) {
-        // Receive a message 
         void *msg = malloc(sizeof(struct packet));
-        size_t bytesRecvd = recv(sockfd, msg, sizeof(struct packet), 0);
+        bzero(msg, sizeof(struct packet));
+
+        // Receive a message 
+        size_t bytesRecvd = recvfrom(reqsockfd, msg, sizeof(struct packet), 0,
+            (struct sockaddr *)&senderAddr, &len);
         if (bytesRecvd == -1) perrorExit("Receive error");
 
         // Deserialize the message into a packet
@@ -146,7 +194,7 @@ int main(int argc, char **argv) {
 
             // Print details about the received packet
             printf("<- [Received DATA packet] ");
-            printPacketInfo(pkt, (struct sockaddr_storage *)p->ai_addr);
+            printPacketInfo(pkt, (struct sockaddr_storage *)sp->ai_addr);
 
             // TODO: save the data so the file can be reassembled later
         }
@@ -173,11 +221,14 @@ int main(int argc, char **argv) {
     // TODO: reassemble parts into file and write it out
 
     // Got what we came for, shut it down
-    if (close(sockfd) == -1) perrorExit("Close error");
-    else                     puts("Connection closed.\n");
+    if (close(reqsockfd) == -1) perrorExit("Close error");
+    else                        puts("Connection closed.\n");
+    if (close(sendsockfd) == -1) perrorExit("Close error");
+    else                         puts("Connection closed.\n");
 
     // Cleanup address and file info data 
     freeaddrinfo(senderinfo);
+    freeaddrinfo(requesterinfo);
     freeFileInfo(fileParts);
 
     // All done!
