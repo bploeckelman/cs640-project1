@@ -106,13 +106,13 @@ int main(int argc, char **argv) {
 
     // Start sending and receiving packets
     struct packet *pkt = NULL;
-    time_t t = time(NULL);
+
+    unsigned long numPacketsRecvd = 0;
+    unsigned long numBytesRecvd = 0;
+    time_t startTime = time(NULL);
 
     for (;;) {
-        // For now only send a test request packet every 2 seconds
-        if (difftime(time(NULL), t) > 2) {
-            t = time(NULL);
-        } else continue;
+        // TODO: start a recv loop here to get all packets for the given part
 
         // Construct a request packet
         pkt = malloc(sizeof(struct packet));
@@ -128,8 +128,8 @@ int main(int argc, char **argv) {
         if (bytesSent == -1)
             perrorExit("Send error");
         else {
-            printf("[Sent %lu payload bytes]", pkt->len);
-            printf(" payload: \"%s\"\n", pkt->payload);
+            printf("-> [Sent %lu payload bytes] ", pkt->len);
+            printf("payload: \"%s\"\n", pkt->payload);
             printf("Requester waiting for response...\n");
         }
 
@@ -142,10 +142,30 @@ int main(int argc, char **argv) {
         pkt = malloc(sizeof(struct packet));
         bzero(pkt, sizeof(struct packet));
         deserializePacket(msg, pkt);
+        ++numPacketsRecvd;
+        numBytesRecvd += pkt->len;
 
         // Print details about the received packet
-        printf("Received: ");
+        printf("<- Received: ");
         printPacketInfo(pkt, (struct sockaddr_storage *)p->ai_addr);
+
+        // Handle END packet
+        if (pkt->type == 'E') {
+            printf("<- *** [Received END packet] ***");
+            double dt = difftime(time(NULL), startTime);
+
+            // Print statistics
+            printf("\n---------------------------------------\n");
+            printf("Total packets recvd: %lu\n", numPacketsRecvd);
+            printf("Total payload bytes recvd: %lu\n", numBytesRecvd);
+            printf("Average packets/second: %d\n", (int)(numPacketsRecvd / dt));
+            printf("Duration of test: %f sec\n\n", dt);
+
+            // Cleanup packets and break out of the recv loop
+            free(msg);
+            free(pkt);
+            break;
+        }
 
         // Cleanup packets
         free(msg);

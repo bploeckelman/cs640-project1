@@ -75,6 +75,7 @@ int main(int argc, char **argv) {
         ferrorExit("Invalid sender port");
     if (requesterPort <= 1024 || requesterPort >= 65536)
         ferrorExit("Invalid requester port");
+    puts("");
 
     // ------------------------------------------------------------------------
 
@@ -116,7 +117,7 @@ int main(int argc, char **argv) {
     else           printNameInfo(p);
 
     // ------------------------------------------------------------------------
-    puts("Sender waiting for request packet...");
+    puts("Sender waiting for request packet...\n");
 
     // Setup the requester address structure
     struct sockaddr_storage requesterAddr;
@@ -127,6 +128,9 @@ int main(int argc, char **argv) {
     //       once it gets one, sender should try to open the 
     //       file part, chunk it into packets, send those 
     //       to the requester, and send an END packet when done
+
+    // Note: this is just for testing END packet handling
+    int numPacketsToEcho = 100000;
 
     // Read packets and echo them back to sender
     for (;;) {
@@ -145,8 +149,8 @@ int main(int argc, char **argv) {
         bzero(pkt, sizeof(struct packet));
         deserializePacket(msg, pkt);
 
-        // TODO: get and print some statistics for the recvd packet
-        printf("Received: ");
+        // Print some statistics for the recvd packet
+        printf("<- [Received]: ");
         printPacketInfo(pkt, &requesterAddr);
 
         // Send a response packet (just echo this one back for now)
@@ -158,12 +162,35 @@ int main(int argc, char **argv) {
             perror("Sendto error");
             fprintf(stderr, "Error sending response\n");
         } else {
-            puts("[Sent response packet]");
+            puts("-> [Sent response packet]");
         }
 
-        // Cleanup packetse
+        // Cleanup packets
         free(pkt);
         free(msg);
+
+        // TODO: Test of END packet 
+        if (--numPacketsToEcho <= 0) {
+            // Create END packet and send it
+            pkt = malloc(sizeof(struct packet));
+            bzero(pkt, sizeof(struct packet));
+            pkt->type = 'E';
+            pkt->seq  = 0;
+            pkt->len  = 0;
+            bytesSent = sendto(sockfd, serializePacket(pkt),
+                               sizeof(struct packet), 0,
+                               (struct sockaddr *)&requesterAddr,
+                               sizeof(struct sockaddr));
+            if (bytesSent != bytesRecvd) {
+                perror("Sendto error");
+                fprintf(stderr, "Error sending response\n");
+            } else {
+                puts("-> *** [Sent END packet] ***");
+            }
+
+            free(pkt);
+            break;
+        }
     }
 
     // Got what we came for, shut it down
