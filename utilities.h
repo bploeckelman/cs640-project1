@@ -5,6 +5,7 @@
 
 #define LOOPBACK "127.0.0.1"
 
+unsigned long long getTimeMS();
 
 // ----------------------------------------------------------------------------
 // Print hostname and port to stdout

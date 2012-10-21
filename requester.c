@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
         deserializePacket(msg, pkt);
 
         // TODO: print some statistics about the packet
-        puts("[Received packet]");
+        printf("[Received packet @ %llu ms]", getTimeMS());
         printPacketInfo(pkt, (struct sockaddr_storage *)p->ai_addr);
 
         // Cleanup packets

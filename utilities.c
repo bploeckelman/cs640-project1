@@ -1,11 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <sys/time.h>
 #include <netinet/in.h>
 #include <netdb.h>
 
 #include "utilities.h"
 
+unsigned long long getTimeMS() {
+    struct timeval t;
+    gettimeofday(&t, NULL);
+    return (unsigned long long)((t.tv_sec + (t.tv_usec / 1000000.0)) * 1000.0);
+}
 
 // ----------------------------------------------------------------------------
 // Print hostname and port to stdout
