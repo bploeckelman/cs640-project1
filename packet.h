@@ -3,7 +3,7 @@
 
 #include <netinet/in.h>
 
-#define MAX_PAYLOAD 5000
+#define MAX_PAYLOAD 5120
 
 
 struct packet {

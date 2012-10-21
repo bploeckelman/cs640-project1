@@ -68,7 +68,6 @@ int main(int argc, char **argv) {
     assert(fileParts != NULL && "Invalid file_info struct");
 
     // ------------------------------------------------------------------------
-    // TODO: this will eventually be moved into the send/recv loop
     // Setup requester address info 
     struct addrinfo rhints;
     bzero(&rhints, sizeof(struct addrinfo));
@@ -85,30 +84,29 @@ int main(int argc, char **argv) {
     }
 
     // Loop through all the results of getaddrinfo and try to create a socket for requester
-    int reqsockfd;
+    int sockfd;
     struct addrinfo *rp;
     for(rp = requesterinfo; rp != NULL; rp = rp->ai_next) {
         // Try to create a new socket
-        reqsockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (reqsockfd == -1) {
+        sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (sockfd == -1) {
             perror("Socket error");
             continue;
         }
 
         // Try to bind the socket
-        //*
-        if (bind(reqsockfd, rp->ai_addr, rp->ai_addrlen) == -1) {
+        if (bind(sockfd, rp->ai_addr, rp->ai_addrlen) == -1) {
             perror("Bind error");
-            close(reqsockfd);
+            close(sockfd);
             continue;
         }
-        //*/
 
         break;
     }
     if (rp == NULL) perrorExit("Request socket creation failed");
     else            { printf("Requester socket: "); printNameInfo(rp); }
 
+    // ------------------------------------------------------------------------
     // Sender hints TODO: move into part loop
     struct addrinfo shints;
     bzero(&shints, sizeof(struct addrinfo));
@@ -130,6 +128,7 @@ int main(int argc, char **argv) {
     }
 
     // Loop through all the results of getaddrinfo and try to create a socket for sender
+    // NOTE: this is done so that we can find which of the getaddrinfo results is the sender
     int sendsockfd;
     struct addrinfo *sp;
     for(sp = senderinfo; sp != NULL; sp = sp->ai_next) {
@@ -143,6 +142,8 @@ int main(int argc, char **argv) {
     }
     if (sp == NULL) perrorExit("Send socket creation failed");
     else            { printf("Sender socket: "); printNameInfo(sp); }
+    close(sendsockfd); // don't need this socket
+
     // ------------------------------------------------------------------------
 
     // Setup variables for statistics
@@ -160,12 +161,16 @@ int main(int argc, char **argv) {
     pkt->len  = strlen(fileOption) + 1;
     strcpy(pkt->payload, fileOption);
 
-    sendPacketTo(sendsockfd, pkt, sp->ai_addr);
+    sendPacketTo(sockfd, pkt, (struct sockaddr *)sp->ai_addr);
 
     free(pkt);
 
     // ------------------------------------------------------------------------
     // TODO: connect to senders one at a time to get all parts
+
+    // TODO: sometimes the requester stops receiving packets 
+    //       even though the sender sends them properly... 
+    //       requester sits blocked in recvfrom below, but doesn't recv 
 
     struct sockaddr_storage senderAddr;
     bzero(&senderAddr, sizeof(struct sockaddr_storage));
@@ -177,7 +182,7 @@ int main(int argc, char **argv) {
         bzero(msg, sizeof(struct packet));
 
         // Receive a message 
-        size_t bytesRecvd = recvfrom(reqsockfd, msg, sizeof(struct packet), 0,
+        size_t bytesRecvd = recvfrom(sockfd, msg, sizeof(struct packet), 0,
             (struct sockaddr *)&senderAddr, &len);
         if (bytesRecvd == -1) perrorExit("Receive error");
 
@@ -194,7 +199,7 @@ int main(int argc, char **argv) {
 
             // Print details about the received packet
             printf("<- [Received DATA packet] ");
-            printPacketInfo(pkt, (struct sockaddr_storage *)sp->ai_addr);
+            printPacketInfo(pkt, (struct sockaddr_storage *)&senderAddr);
 
             // TODO: save the data so the file can be reassembled later
         }
@@ -221,10 +226,8 @@ int main(int argc, char **argv) {
     // TODO: reassemble parts into file and write it out
 
     // Got what we came for, shut it down
-    if (close(reqsockfd) == -1) perrorExit("Close error");
+    if (close(sockfd) == -1) perrorExit("Close error");
     else                        puts("Connection closed.\n");
-    if (close(sendsockfd) == -1) perrorExit("Close error");
-    else                         puts("Connection closed.\n");
 
     // Cleanup address and file info data 
     freeaddrinfo(senderinfo);
