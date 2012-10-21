@@ -66,15 +66,17 @@ int main(int argc, char **argv) {
     // Convert program args to values
     int senderPort    = atoi(portStr);
     int requesterPort = atoi(reqPortStr);
-//  int sendRate      = atoi(rateStr);
     int sequenceNum   = atoi(seqNumStr);
     int payloadLen    = atoi(lenStr);
+    unsigned sendRate = (unsigned) atoi(rateStr);
 
     // Validate the argument values
     if (senderPort <= 1024 || senderPort >= 65536)
         ferrorExit("Invalid sender port");
     if (requesterPort <= 1024 || requesterPort >= 65536)
         ferrorExit("Invalid requester port");
+    if (sendRate > 1000 || sendrate < 1);
+        ferrorExit("Invalid sendrate");
     puts("");
 
     // ------------------------------------------------------------------------
@@ -173,6 +175,9 @@ int main(int argc, char **argv) {
     if (file == NULL) perrorExit("File open error");
     else              printf("Opened file \"%s\" for reading.\n", filename);
 
+    unsigned long long start, end;
+    start = getTimeMS();
+    unsigned i = 0;
     struct packet *pkt;
     for (;;) {
         // Is file part finished?
@@ -184,8 +189,11 @@ int main(int argc, char **argv) {
             pkt->seq  = 0;
             pkt->len  = 0;
 
+            while (end < ((i *1000) / sendRate)) {
+                end = getTimeMS();
+            }
             sendPacketTo(sockfd, pkt, (struct sockaddr *)&requesterAddr);
-
+            i++;
             free(pkt);
             break;
         }
