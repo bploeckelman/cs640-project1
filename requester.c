@@ -165,6 +165,13 @@ int main(int argc, char **argv) {
 
     free(pkt);
 
+    // Create the file to write data to
+//  if (access(fileOption, F_OK) != -1) // if it already exists
+//      remove(fileOption);             // delete it
+
+    FILE *file = fopen("recvd.txt", "at");
+    if (file == NULL) perrorExit("File open error");
+
     // ------------------------------------------------------------------------
     // TODO: connect to senders one at a time to get all parts
 
@@ -202,13 +209,19 @@ int main(int argc, char **argv) {
             printPacketInfo(pkt, (struct sockaddr_storage *)&senderAddr);
 
             // TODO: save the data so the file can be reassembled later
+            size_t bytesWritten = fwrite(pkt->payload, 1, pkt->len, file);
+            if (bytesWritten != pkt->len) {
+                fprintf(stderr, "Incomplete file write: %d bytes written", bytesWritten);
+            } else {
+                fflush(file);
+            }
         }
 
         // Handle END packet
         if (pkt->type == 'E') {
             printf("<- *** [Received END packet] ***");
             double dt = difftime(time(NULL), startTime);
-            if (dt <= 0) dt = 1;
+            if (dt <= 1) dt = 1;
 
             // Print statistics
             printf("\n---------------------------------------\n");
@@ -223,7 +236,7 @@ int main(int argc, char **argv) {
     }
     free(pkt);
 
-    // TODO: reassemble parts into file and write it out
+    fclose(file);
 
     // Got what we came for, shut it down
     if (close(sockfd) == -1) perrorExit("Close error");
