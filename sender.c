@@ -203,28 +203,8 @@ int main(int argc, char **argv) {
     if (file == NULL) perrorExit("File open error");
     else              printf("Opened file \"%s\" for reading.\n", filename);
 
+    struct packet *pkt;
     for (;;) {
-        // Create DATA packet
-        struct packet *pkt = malloc(sizeof(struct packet));
-        bzero(pkt, sizeof(struct packet));
-        pkt->type = 'D';
-        pkt->seq  = sequenceNum;
-        pkt->len  = payloadLen;
-
-        // Chunk the next batch of file data into this packet
-        char buf[payloadLen];
-        fread(buf, 1, payloadLen, file); // TODO: check return value
-        memcpy(pkt->payload, buf, sizeof(buf));
-
-        // Send the DATA packet to the requester 
-        sendPacketTo(reqsockfd, pkt, (struct sockaddr *)rp->ai_addr);
-
-        // Cleanup packets
-        free(pkt);
-
-        // Update sequence number for next packet
-        sequenceNum += payloadLen;
-
         // Is file part finished?
         if (feof(file) != 0) {
             // Create END packet and send it
@@ -243,6 +223,27 @@ int main(int argc, char **argv) {
             free(pkt);
             break;
         }
+
+        // Create DATA packet
+        pkt = malloc(sizeof(struct packet));
+        bzero(pkt, sizeof(struct packet));
+        pkt->type = 'D';
+        pkt->seq  = sequenceNum;
+        pkt->len  = payloadLen;
+
+        // Chunk the next batch of file data into this packet
+        char buf[payloadLen];
+        fread(buf, 1, payloadLen, file); // TODO: check return value
+        memcpy(pkt->payload, buf, sizeof(buf));
+
+        // Send the DATA packet to the requester 
+        sendPacketTo(reqsockfd, pkt, (struct sockaddr *)rp->ai_addr);
+
+        // Cleanup packets
+        free(pkt);
+
+        // Update sequence number for next packet
+        sequenceNum += payloadLen;
     }
 
     // Cleanup the file
