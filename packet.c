@@ -43,12 +43,24 @@ void deserializePacket(void *msg, struct packet *pkt) {
     memcpy(pkt->payload, p->payload, MAX_PAYLOAD);
 }
 
-void sendPacket(int sockfd, struct packet *pkt) {
-    // TODO
-}
+void sendPacketTo(int sockfd, struct packet *pkt, struct sockaddr *addr) {
+    struct packet *spkt = serializePacket(pkt);
+    size_t bytesSent = sendto(sockfd, spkt, PACKET_SIZE,
+                              0, addr, sizeof(struct sockaddr));
 
-void recvPacket(int sockfd, struct packet *pkt) {
-    // TODO
+    if (bytesSent == -1) {
+        perror("Sendto error");
+        fprintf(stderr, "Error sending packet\n");
+    } else {
+        const char *typeStr;
+        if      (pkt->type == 'R') typeStr = "**REQUEST**";
+        else if (pkt->type == 'D') typeStr = "DATA";
+        else if (pkt->type == 'E') typeStr = "**END***";
+        else                       typeStr = "UNDEFINED";
+
+        printf("-> [Sent %s packet] ", typeStr);
+        printPacketInfo(pkt, (struct sockaddr_storage *)addr);
+    }
 }
 
 void printPacketInfo(struct packet *pkt, struct sockaddr_storage *saddr) {
@@ -58,13 +70,13 @@ void printPacketInfo(struct packet *pkt, struct sockaddr_storage *saddr) {
     }
 
     char *ipstr = ""; 
-    //unsigned short ipport = 0;
+    unsigned short ipport = 0;
     if (saddr == NULL) {
         fprintf(stderr, "Unable to print packet source from null sockaddr\n");
     } else {
         struct sockaddr_in *sin = (struct sockaddr_in *)saddr;
         ipstr  = inet_ntoa(sin->sin_addr);
-        //ipport = ntohs(sin->sin_port);
+        ipport = ntohs(sin->sin_port);
     }
 
     char pl_bytes[5];
@@ -74,8 +86,8 @@ void printPacketInfo(struct packet *pkt, struct sockaddr_storage *saddr) {
     pl_bytes[3] = pkt->payload[3]; 
     pl_bytes[4] = '\0';
 
-    printf("@%llu ms : ip %s : seq %lu : len %lu : pld \"%s\"\n",
-        getTimeMS(), ipstr, pkt->seq, pkt->len, pl_bytes);
+    printf("@%llu ms : ip %s:%u : seq %lu : len %lu : pld \"%s\"\n",
+        getTimeMS(), ipstr, ipport, pkt->seq, pkt->len, pl_bytes);
     /*
     printf("  Packet from %s:%u (%lu payload bytes):\n",ipstr,ipport,pkt->len);
     printf("    type = %c\n", pkt->type);

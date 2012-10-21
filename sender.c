@@ -186,24 +186,14 @@ int main(int argc, char **argv) {
         fread(buf, 1, payloadLen, file); // TODO: check return value
         memcpy(pkt->payload, buf, sizeof(buf));
 
-        // Update sequence number for next packet
-        sequenceNum += payloadLen;
-
         // Send the DATA packet to the requester 
-        size_t bytesSent = sendto(sockfd, serializePacket(pkt),
-                                  sizeof(struct packet), 0,
-                                  (struct sockaddr *)&requesterAddr,
-                                  sizeof(struct sockaddr));
-        if (bytesSent == -1) {
-            perror("Sendto error");
-            fprintf(stderr, "Error sending response\n");
-        } else {
-            printf("-> [Sent DATA packet] ");
-            printPacketInfo(pkt, &requesterAddr);
-        }
+        sendPacketTo(sockfd, pkt, (struct sockaddr *)&requesterAddr);
 
         // Cleanup packets
         free(pkt);
+
+        // Update sequence number for next packet
+        sequenceNum += payloadLen;
 
         // Is file part finished?
         if (feof(file) != 0) {
@@ -217,16 +207,8 @@ int main(int argc, char **argv) {
             pkt->type = 'E';
             pkt->seq  = 0;
             pkt->len  = 0;
-            bytesSent = sendto(sockfd, serializePacket(pkt),
-                               sizeof(struct packet), 0,
-                               (struct sockaddr *)&requesterAddr,
-                               sizeof(struct sockaddr));
-            if (bytesSent == -1) {
-                perror("Sendto error");
-                fprintf(stderr, "Error sending response\n");
-            } else {
-                puts("-> *** [Sent END packet] ***");
-            }
+
+            sendPacketTo(sockfd, pkt, (struct sockaddr *)&requesterAddr);
 
             free(pkt);
             break;

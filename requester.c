@@ -115,20 +115,12 @@ int main(int argc, char **argv) {
     pkt = malloc(sizeof(struct packet));
     bzero(pkt, sizeof(struct packet));
     pkt->type = 'R';
-    pkt->seq  = 0; // 0 for request pkts, otherwise: part->id;
+    pkt->seq  = 0;
     pkt->len  = strlen(fileOption) + 1;
     strcpy(pkt->payload, fileOption);
 
-    // Send the serialized REQUEST packet
-    size_t bytesSent = sendto(sockfd, serializePacket(pkt),
-        sizeof(struct packet), 0, p->ai_addr, p->ai_addrlen);
-    if (bytesSent == -1)
-        perrorExit("Send error");
-    else {
-        printf("-> [Sent REQUEST packet] ");
-        printPacketInfo(pkt, (struct sockaddr_storage *)p->ai_addr);
-        printf("Requester waiting for response...\n\n");
-    }
+    sendPacketTo(sockfd, pkt, p->ai_addr);
+
     free(pkt);
 
     // ------------------------------------------------------------------------
@@ -172,16 +164,11 @@ int main(int argc, char **argv) {
             printf("Average packets/second: %d\n", (int)(numPacketsRecvd / dt));
             printf("Duration of test: %f sec\n\n", dt);
 
-            // Cleanup packets and break out of the recv loop
-            free(msg);
-            free(pkt);
             break;
         }
 
-        // Cleanup packets
-        free(msg);
-        free(pkt);
     }
+    free(pkt);
 
     // TODO: reassemble parts into file and write it out
 
