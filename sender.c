@@ -125,6 +125,7 @@ int main(int argc, char **argv) {
     socklen_t len = sizeof(struct sockaddr_storage);
 
     // Receive and discard packets until a REQUEST packet arrives
+    char *filename = NULL;
     for (;;) {
         void *msg = malloc(sizeof(struct packet));
         bzero(msg, sizeof(struct packet));
@@ -148,6 +149,11 @@ int main(int argc, char **argv) {
             // Print some statistics for the recvd packet
             printf("<- [Received REQUEST]: ");
             printPacketInfo(pkt, &requesterAddr);
+
+            // Grab a copy of the filename
+            filename = strdup(pkt->payload);
+
+            // Cleanup packets
             free(pkt);
             free(msg);
             break;
@@ -165,6 +171,9 @@ int main(int argc, char **argv) {
     int numPacketsToEcho = 10;
 
     // TODO: open file for reading
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) perrorExit("File open error");
+    else              printf("Opened file \"%s\" for reading.\n", filename);
 
     for (;;) {
         // Create DATA packet
@@ -221,6 +230,12 @@ int main(int argc, char **argv) {
             break;
         }
     }
+
+    // Cleanup the file
+    if (fclose(file) != 0) fprintf(stderr, "Failed to close file \"%s\"\n", filename);
+    else                   printf("File \"%s\" closed.\n", filename);
+    free(filename);
+
 
     // Got what we came for, shut it down
     if (close(sockfd) == -1) perrorExit("Close error");
