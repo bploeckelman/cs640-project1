@@ -166,11 +166,9 @@ int main(int argc, char **argv) {
 
     // ------------------------------------------------------------------------
     // Got REQUEST packet, start sending DATA packets
+    // ------------------------------------------------------------------------
 
-    // Note: this is just for testing END packet handling
-    int numPacketsToEcho = 10;
-
-    // TODO: open file for reading
+    // Open file for reading
     FILE *file = fopen(filename, "r");
     if (file == NULL) perrorExit("File open error");
     else              printf("Opened file \"%s\" for reading.\n", filename);
@@ -183,9 +181,10 @@ int main(int argc, char **argv) {
         pkt->seq  = sequenceNum;
         pkt->len  = payloadLen;
 
-        // TODO: chunk file into packet payloads
-        const char *testStr = "DATA-foobar\0";
-        memcpy(pkt->payload, testStr, sizeof(testStr));
+        // Chunk the next batch of file data into this packet
+        char buf[payloadLen];
+        fread(buf, 1, payloadLen, file); // TODO: check return value
+        memcpy(pkt->payload, buf, sizeof(buf));
 
         // Update sequence number for next packet
         sequenceNum += payloadLen;
@@ -205,11 +204,14 @@ int main(int argc, char **argv) {
 
         // Cleanup packets
         free(pkt);
-        //free(msg);
 
-        // TODO: Test of END packet 
-        if (--numPacketsToEcho <= 0) {
+        // Is file part finished?
+        if (feof(file) != 0) {
             // Create END packet and send it
+            // TODO: sometimes this packet isn't received 
+            //       and the requester doesn't shutdown
+            //       needs to be handled somehow... 
+            //       FIN packet back from requester on receipt of END?
             pkt = malloc(sizeof(struct packet));
             bzero(pkt, sizeof(struct packet));
             pkt->type = 'E';
