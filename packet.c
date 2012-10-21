@@ -74,7 +74,7 @@ void printPacketInfo(struct packet *pkt, struct sockaddr_storage *saddr) {
     pl_bytes[3] = pkt->payload[3]; 
     pl_bytes[4] = '\0';
 
-    printf("packet @ %llu ms : ip %s : seq %lu : len %lu : pl \"%s\"\n",
+    printf("@%llu ms : ip %s : seq %lu : len %lu : pld \"%s\"\n",
         getTimeMS(), ipstr, pkt->seq, pkt->len, pl_bytes);
     /*
     printf("  Packet from %s:%u (%lu payload bytes):\n",ipstr,ipport,pkt->len);

@@ -104,55 +104,66 @@ int main(int argc, char **argv) {
     else           printNameInfo(p);
     // ------------------------------------------------------------------------
 
-    // Start sending and receiving packets
-    struct packet *pkt = NULL;
-
+    // Setup variables for statistics
     unsigned long numPacketsRecvd = 0;
     unsigned long numBytesRecvd = 0;
     time_t startTime = time(NULL);
 
+    // ------------------------------------------------------------------------
+    // Construct a REQUEST packet
+    struct packet *pkt = NULL;
+    pkt = malloc(sizeof(struct packet));
+    bzero(pkt, sizeof(struct packet));
+    pkt->type = 'R';
+    pkt->seq  = 0; // 0 for request pkts, otherwise: part->id;
+    pkt->len  = strlen(fileOption) + 1;
+    strcpy(pkt->payload, fileOption);
+
+    // Send the serialized REQUEST packet
+    size_t bytesSent = sendto(sockfd, serializePacket(pkt),
+        sizeof(struct packet), 0, p->ai_addr, p->ai_addrlen);
+    if (bytesSent == -1)
+        perrorExit("Send error");
+    else {
+        printf("-> [Sent REQUEST packet] ");
+        printPacketInfo(pkt, (struct sockaddr_storage *)p->ai_addr);
+        printf("Requester waiting for response...\n\n");
+    }
+    free(pkt);
+
+    // ------------------------------------------------------------------------
+    // TODO: connect to senders one at a time to get all parts
+
+    // Start a recv loop here to get all packets for the given part
     for (;;) {
-        // TODO: start a recv loop here to get all packets for the given part
-
-        // Construct a request packet
-        pkt = malloc(sizeof(struct packet));
-        bzero(pkt, sizeof(struct packet));
-        pkt->type = 'R';
-        pkt->seq  = 0; // 0 for request pkts, otherwise: part->id;
-        pkt->len  = strlen(fileOption) + 1;
-        strcpy(pkt->payload, fileOption);
-
-        // Send the serialized request packet
-        size_t bytesSent = sendto(sockfd, serializePacket(pkt),
-            sizeof(struct packet), 0, p->ai_addr, p->ai_addrlen);
-        if (bytesSent == -1)
-            perrorExit("Send error");
-        else {
-            printf("-> [Sent %lu payload bytes] ", pkt->len);
-            printf("payload: \"%s\"\n", pkt->payload);
-            printf("Requester waiting for response...\n");
-        }
-
-        // Receive a response message 
+        // Receive a message 
         void *msg = malloc(sizeof(struct packet));
         size_t bytesRecvd = recv(sockfd, msg, sizeof(struct packet), 0);
         if (bytesRecvd == -1) perrorExit("Receive error");
 
-        // Deserialize the response message into a packet
+        // Deserialize the message into a packet
         pkt = malloc(sizeof(struct packet));
         bzero(pkt, sizeof(struct packet));
         deserializePacket(msg, pkt);
-        ++numPacketsRecvd;
-        numBytesRecvd += pkt->len;
 
-        // Print details about the received packet
-        printf("<- Received: ");
-        printPacketInfo(pkt, (struct sockaddr_storage *)p->ai_addr);
+        // Handle DATA packet
+        if (pkt->type == 'D') {
+            // Update statistics
+            ++numPacketsRecvd;
+            numBytesRecvd += pkt->len;
+
+            // Print details about the received packet
+            printf("<- [Received DATA packet] ");
+            printPacketInfo(pkt, (struct sockaddr_storage *)p->ai_addr);
+
+            // TODO: save the data so the file can be reassembled later
+        }
 
         // Handle END packet
         if (pkt->type == 'E') {
             printf("<- *** [Received END packet] ***");
             double dt = difftime(time(NULL), startTime);
+            if (dt <= 0) dt = 1;
 
             // Print statistics
             printf("\n---------------------------------------\n");
@@ -170,7 +181,9 @@ int main(int argc, char **argv) {
         // Cleanup packets
         free(msg);
         free(pkt);
-   }
+    }
+
+    // TODO: reassemble parts into file and write it out
 
     // Got what we came for, shut it down
     if (close(sockfd) == -1) perrorExit("Close error");
