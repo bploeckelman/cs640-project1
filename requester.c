@@ -128,8 +128,8 @@ int main(int argc, char **argv) {
         if (bytesSent == -1)
             perrorExit("Send error");
         else {
-            printf("[Sent %lu payload bytes]\n", pkt->len);
-            printf("  payload: \"%s\"\n", pkt->payload);
+            printf("[Sent %lu payload bytes]", pkt->len);
+            printf(" payload: \"%s\"\n", pkt->payload);
             printf("Requester waiting for response...\n");
         }
 
@@ -143,8 +143,8 @@ int main(int argc, char **argv) {
         bzero(pkt, sizeof(struct packet));
         deserializePacket(msg, pkt);
 
-        // TODO: print some statistics about the packet
-        printf("[Received packet @ %llu ms]", getTimeMS());
+        // Print details about the received packet
+        printf("Received: ");
         printPacketInfo(pkt, (struct sockaddr_storage *)p->ai_addr);
 
         // Cleanup packets

@@ -146,7 +146,7 @@ int main(int argc, char **argv) {
         deserializePacket(msg, pkt);
 
         // TODO: get and print some statistics for the recvd packet
-        puts("[Received packet]");
+        printf("Received: ");
         printPacketInfo(pkt, &requesterAddr);
 
         // Send a response packet (just echo this one back for now)
@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
             perror("Sendto error");
             fprintf(stderr, "Error sending response\n");
         } else {
-            puts("[Sent response packet]\n");
+            puts("[Sent response packet]");
         }
 
         // Cleanup packetse

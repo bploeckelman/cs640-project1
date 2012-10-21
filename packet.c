@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 
 #include "packet.h"
+#include "utilities.h"
 
 
 void *serializePacket(struct packet *pkt) {
@@ -57,20 +58,31 @@ void printPacketInfo(struct packet *pkt, struct sockaddr_storage *saddr) {
     }
 
     char *ipstr = ""; 
-    unsigned short ipport = 0;
+    //unsigned short ipport = 0;
     if (saddr == NULL) {
         fprintf(stderr, "Unable to print packet source from null sockaddr\n");
     } else {
         struct sockaddr_in *sin = (struct sockaddr_in *)saddr;
         ipstr  = inet_ntoa(sin->sin_addr);
-        ipport = ntohs(sin->sin_port);
+        //ipport = ntohs(sin->sin_port);
     }
 
+    char pl_bytes[5];
+    pl_bytes[0] = pkt->payload[0]; 
+    pl_bytes[1] = pkt->payload[1]; 
+    pl_bytes[2] = pkt->payload[2]; 
+    pl_bytes[3] = pkt->payload[3]; 
+    pl_bytes[4] = '\0';
+
+    printf("packet @ %llu ms : ip %s : seq %lu : len %lu : pl \"%s\"\n",
+        getTimeMS(), ipstr, pkt->seq, pkt->len, pl_bytes);
+    /*
     printf("  Packet from %s:%u (%lu payload bytes):\n",ipstr,ipport,pkt->len);
     printf("    type = %c\n", pkt->type);
     printf("    seq  = %lu\n", pkt->seq);
     printf("    len  = %lu\n", pkt->len);
     printf("    data = %s\n", pkt->payload);
     puts("");
+    */
 }
 
