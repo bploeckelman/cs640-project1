@@ -239,8 +239,9 @@ int main(int argc, char **argv) {
     
         }
         part = part->next_part;
+        free(pkt);
+        freeaddrinfo(senderinfo);
     }
-    free(pkt);
 
     fclose(file);
 
@@ -249,7 +250,6 @@ int main(int argc, char **argv) {
     else                        puts("Connection closed.\n");
 
     // Cleanup address and file info data 
-    freeaddrinfo(senderinfo);
     freeaddrinfo(requesterinfo);
     freeFileInfo(fileParts);
 
