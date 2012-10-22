@@ -145,7 +145,7 @@ int main(int argc, char **argv) {
             break;
         }
         if (sp == NULL) perrorExit("Send socket creation failed");
-        else            { printf("Sender socket: "); printNameInfo(sp); }
+        //else            printf("Sender socket created.\n\n");
         close(sendsockfd); // don't need this socket
     
         // ------------------------------------------------------------------------
@@ -170,11 +170,9 @@ int main(int argc, char **argv) {
         free(pkt);
     
         // Create the file to write data to
-    //  if (access(fileOption, F_OK) != -1) // if it already exists
-    //      remove(fileOption);             // delete it
-    
-        
-    
+        if (access(fileOption, F_OK) != -1) // if it already exists
+            remove(fileOption);             // delete it
+
         // ------------------------------------------------------------------------
         // Connect to senders one at a time to get all parts
     
@@ -207,12 +205,20 @@ int main(int argc, char **argv) {
                 // Update statistics
                 ++numPacketsRecvd;
                 numBytesRecvd += pkt->len;
+
+                /* FOR DEBUG
+                printf("[Packet Details]\n------------------\n");
+                printf("type : %c\n", pkt->type);
+                printf("seq  : %lu\n", pkt->seq);
+                printf("len  : %lu\n", pkt->len);
+                printf("payload: %s\n\n", pkt->payload);
+                */
     
                 // Print details about the received packet
                 printf("<- [Received DATA packet] ");
                 printPacketInfo(pkt, (struct sockaddr_storage *)&senderAddr);
     
-                // TODO: save the data so the file can be reassembled later
+                // Save the data so the file can be reassembled later
                 size_t bytesWritten = fprintf(file, "%s", pkt->payload);
                 if (bytesWritten != pkt->len) {
                     fprintf(stderr,

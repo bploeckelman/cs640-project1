@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
         break;
     }
     if (sp == NULL) perrorExit("Send socket creation failed");
-    else            { printf("Sender socket: "); printNameInfo(sp); }
+    else            printf("Sender socket created.\n");
 
     // -----------------------------===========================================
     // REQUESTER ADDRESS INFO
@@ -146,17 +146,12 @@ int main(int argc, char **argv) {
 
         break;
     }
-    if (sp == NULL) perrorExit("request socket creation failed");
-    else            { printf("requester socket: "); printNameInfo(rp); }
+    if (sp == NULL) perrorExit("Requester lookup failed to create socket");
+    //else            printf("Requester socket created.\n\n");
     close(requestsockfd); // don't need this socket
 
     // ------------------------------------------------------------------------
     puts("Sender waiting for request packet...\n");
-
-    // Setup the requester address 
-    //struct sockaddr_storage requesterAddr;
-    //bzero(&requesterAddr, sizeof(struct sockaddr_storage));
-    //socklen_t len = sizeof(requesterAddr);
 
     // Receive and discard packets until a REQUEST packet arrives
     char *filename = NULL;
@@ -167,7 +162,6 @@ int main(int argc, char **argv) {
         // Receive a message
         size_t bytesRecvd = recvfrom(sockfd, msg, sizeof(struct packet), 0,
             (struct sockaddr *)rp->ai_addr, &rp->ai_addrlen);
-//            (struct sockaddr *)&requesterAddr, &len);
         if (bytesRecvd == -1) {
             perror("Recvfrom error");
             fprintf(stderr, "Failed/incomplete receive: ignoring\n");
@@ -183,7 +177,7 @@ int main(int argc, char **argv) {
         if (pkt->type == 'R') {
             // Print some statistics for the recvd packet
             printf("<- [Received REQUEST]: ");
-            printPacketInfo(pkt, (struct sockaddr_storage *)rp->ai_addr);//&requesterAddr);
+            printPacketInfo(pkt, (struct sockaddr_storage *)rp->ai_addr);
 
             // Grab a copy of the filename
             filename = strdup(pkt->payload);
@@ -220,13 +214,13 @@ int main(int argc, char **argv) {
             pkt->seq  = 0;
             pkt->len  = 0;
 
-            sendPacketTo(sockfd, pkt, (struct sockaddr *)rp->ai_addr);//&requesterAddr);
+            sendPacketTo(sockfd, pkt, (struct sockaddr *)rp->ai_addr);
 
             free(pkt);
             break;
         }
 
-        // Send rate
+        // Send rate limiter
         unsigned long long dt = getTimeMS() - start;
         if (dt < 1000 / sendRate) {
             continue; 
@@ -243,11 +237,20 @@ int main(int argc, char **argv) {
 
         // Chunk the next batch of file data into this packet
         char buf[payloadLen];
+        bzero(buf, payloadLen);
         fread(buf, 1, payloadLen, file); // TODO: check return value
         memcpy(pkt->payload, buf, sizeof(buf));
 
+        /*
+        printf("[Packet Details]\n------------------\n");
+        printf("type : %c\n", pkt->type);
+        printf("seq  : %lu\n", pkt->seq);
+        printf("len  : %lu\n", pkt->len);
+        printf("payload: %s\n\n", pkt->payload);
+        */
+
         // Send the DATA packet to the requester 
-        sendPacketTo(sockfd, pkt, (struct sockaddr *)rp->ai_addr);//&requesterAddr);
+        sendPacketTo(sockfd, pkt, (struct sockaddr *)rp->ai_addr);
 
         // Cleanup packets
         free(pkt);
