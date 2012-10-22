@@ -177,11 +177,12 @@ int main(int argc, char **argv) {
         
     
         // ------------------------------------------------------------------------
-        // TODO: connect to senders one at a time to get all parts
+        // Connect to senders one at a time to get all parts
     
         // TODO: sometimes the requester stops receiving packets 
         //       even though the sender sends them properly... 
         //       requester sits blocked in recvfrom below, but doesn't recv 
+        // NOTE: this isn't happening anymore with the rate limit betw 1-1000 pkt/sec
     
         struct sockaddr_storage senderAddr;
         bzero(&senderAddr, sizeof(struct sockaddr_storage));
@@ -213,7 +214,7 @@ int main(int argc, char **argv) {
                 printPacketInfo(pkt, (struct sockaddr_storage *)&senderAddr);
     
                 // TODO: save the data so the file can be reassembled later
-                size_t bytesWritten = fwrite(pkt->payload, 1, pkt->len, file);
+                size_t bytesWritten = fprintf(file, "%s", pkt->payload);
                 if (bytesWritten != pkt->len) {
                     fprintf(stderr, "Incomplete file write: %d bytes written", bytesWritten);
                 } else {
