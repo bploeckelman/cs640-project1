@@ -116,123 +116,129 @@ int main(int argc, char **argv) {
 
     // Convert the sender's port # to a string
     struct file_part *part = fileParts->parts;
-    char senderPortStr[6] = "\0\0\0\0\0\0";
-    sprintf(senderPortStr, "%d", part->sender_port);
-
-    // Get the sender's address info
-    struct addrinfo *senderinfo;
-    errcode = getaddrinfo(part->sender_hostname, senderPortStr, &shints, &senderinfo);
-    if (errcode != 0) {
-        fprintf(stderr, "sender getaddrinfo: %s\n", gai_strerror(errcode));
-        exit(EXIT_FAILURE);
-    }
-
-    // Loop through all the results of getaddrinfo and try to create a socket for sender
-    // NOTE: this is done so that we can find which of the getaddrinfo results is the sender
-    int sendsockfd;
-    struct addrinfo *sp;
-    for(sp = senderinfo; sp != NULL; sp = sp->ai_next) {
-        sendsockfd = socket(sp->ai_family, sp->ai_socktype, sp->ai_protocol);
-        if (sendsockfd == -1) {
-            perror("Socket error");
-            continue;
-        }
-
-        break;
-    }
-    if (sp == NULL) perrorExit("Send socket creation failed");
-    else            { printf("Sender socket: "); printNameInfo(sp); }
-    close(sendsockfd); // don't need this socket
-
-    // ------------------------------------------------------------------------
-
-    // Setup variables for statistics
-    unsigned long numPacketsRecvd = 0;
-    unsigned long numBytesRecvd = 0;
-    time_t startTime = time(NULL);
-
-    // ------------------------------------------------------------------------
-    // Construct a REQUEST packet
-    struct packet *pkt = NULL;
-    pkt = malloc(sizeof(struct packet));
-    bzero(pkt, sizeof(struct packet));
-    pkt->type = 'R';
-    pkt->seq  = 0;
-    pkt->len  = strlen(fileOption) + 1;
-    strcpy(pkt->payload, fileOption);
-
-    sendPacketTo(sockfd, pkt, (struct sockaddr *)sp->ai_addr);
-
-    free(pkt);
-
-    // Create the file to write data to
-//  if (access(fileOption, F_OK) != -1) // if it already exists
-//      remove(fileOption);             // delete it
-
+    
     FILE *file = fopen("recvd.txt", "at");
     if (file == NULL) perrorExit("File open error");
-
-    // ------------------------------------------------------------------------
-    // TODO: connect to senders one at a time to get all parts
-
-    // TODO: sometimes the requester stops receiving packets 
-    //       even though the sender sends them properly... 
-    //       requester sits blocked in recvfrom below, but doesn't recv 
-
-    struct sockaddr_storage senderAddr;
-    bzero(&senderAddr, sizeof(struct sockaddr_storage));
-    socklen_t len = sizeof(senderAddr);
-
-    // Start a recv loop here to get all packets for the given part
-    for (;;) {
-        void *msg = malloc(sizeof(struct packet));
-        bzero(msg, sizeof(struct packet));
-
-        // Receive a message 
-        size_t bytesRecvd = recvfrom(sockfd, msg, sizeof(struct packet), 0,
-            (struct sockaddr *)&senderAddr, &len);
-        if (bytesRecvd == -1) perrorExit("Receive error");
-
-        // Deserialize the message into a packet
-        pkt = malloc(sizeof(struct packet));
-        bzero(pkt, sizeof(struct packet));
-        deserializePacket(msg, pkt);
-
-        // Handle DATA packet
-        if (pkt->type == 'D') {
-            // Update statistics
-            ++numPacketsRecvd;
-            numBytesRecvd += pkt->len;
-
-            // Print details about the received packet
-            printf("<- [Received DATA packet] ");
-            printPacketInfo(pkt, (struct sockaddr_storage *)&senderAddr);
-
-            // TODO: save the data so the file can be reassembled later
-            size_t bytesWritten = fwrite(pkt->payload, 1, pkt->len, file);
-            if (bytesWritten != pkt->len) {
-                fprintf(stderr, "Incomplete file write: %d bytes written", bytesWritten);
-            } else {
-                fflush(file);
-            }
+    
+    while (part != NULL) {
+        char senderPortStr[6] = "\0\0\0\0\0\0";
+        sprintf(senderPortStr, "%d", part->sender_port);
+    
+        // Get the sender's address info
+        struct addrinfo *senderinfo;
+        errcode = getaddrinfo(part->sender_hostname, senderPortStr, &shints, &senderinfo);
+        if (errcode != 0) {
+            fprintf(stderr, "sender getaddrinfo: %s\n", gai_strerror(errcode));
+            exit(EXIT_FAILURE);
         }
-
-        // Handle END packet
-        if (pkt->type == 'E') {
-            printf("<- *** [Received END packet] ***");
-            double dt = difftime(time(NULL), startTime);
-            if (dt <= 1) dt = 1;
-
-            // Print statistics
-            printf("\n---------------------------------------\n");
-            printf("Total packets recvd: %lu\n", numPacketsRecvd);
-            printf("Total payload bytes recvd: %lu\n", numBytesRecvd);
-            printf("Average packets/second: %d\n", (int)(numPacketsRecvd / dt));
-            printf("Duration of test: %f sec\n\n", dt);
-
+    
+        // Loop through all the results of getaddrinfo and try to create a socket for sender
+        // NOTE: this is done so that we can find which of the getaddrinfo results is the sender
+        int sendsockfd;
+        struct addrinfo *sp;
+        for(sp = senderinfo; sp != NULL; sp = sp->ai_next) {
+            sendsockfd = socket(sp->ai_family, sp->ai_socktype, sp->ai_protocol);
+            if (sendsockfd == -1) {
+                perror("Socket error");
+                continue;
+            }
+    
             break;
         }
-
+        if (sp == NULL) perrorExit("Send socket creation failed");
+        else            { printf("Sender socket: "); printNameInfo(sp); }
+        close(sendsockfd); // don't need this socket
+    
+        // ------------------------------------------------------------------------
+    
+        // Setup variables for statistics
+        unsigned long numPacketsRecvd = 0;
+        unsigned long numBytesRecvd = 0;
+        time_t startTime = time(NULL);
+    
+        // ------------------------------------------------------------------------
+        // Construct a REQUEST packet
+        struct packet *pkt = NULL;
+        pkt = malloc(sizeof(struct packet));
+        bzero(pkt, sizeof(struct packet));
+        pkt->type = 'R';
+        pkt->seq  = 0;
+        pkt->len  = strlen(fileOption) + 1;
+        strcpy(pkt->payload, fileOption);
+    
+        sendPacketTo(sockfd, pkt, (struct sockaddr *)sp->ai_addr);
+    
+        free(pkt);
+    
+        // Create the file to write data to
+    //  if (access(fileOption, F_OK) != -1) // if it already exists
+    //      remove(fileOption);             // delete it
+    
+        
+    
+        // ------------------------------------------------------------------------
+        // TODO: connect to senders one at a time to get all parts
+    
+        // TODO: sometimes the requester stops receiving packets 
+        //       even though the sender sends them properly... 
+        //       requester sits blocked in recvfrom below, but doesn't recv 
+    
+        struct sockaddr_storage senderAddr;
+        bzero(&senderAddr, sizeof(struct sockaddr_storage));
+        socklen_t len = sizeof(senderAddr);
+    
+        // Start a recv loop here to get all packets for the given part
+        for (;;) {
+            void *msg = malloc(sizeof(struct packet));
+            bzero(msg, sizeof(struct packet));
+    
+            // Receive a message 
+            size_t bytesRecvd = recvfrom(sockfd, msg, sizeof(struct packet), 0,
+                (struct sockaddr *)&senderAddr, &len);
+            if (bytesRecvd == -1) perrorExit("Receive error");
+    
+            // Deserialize the message into a packet
+            pkt = malloc(sizeof(struct packet));
+            bzero(pkt, sizeof(struct packet));
+            deserializePacket(msg, pkt);
+    
+            // Handle DATA packet
+            if (pkt->type == 'D') {
+                // Update statistics
+                ++numPacketsRecvd;
+                numBytesRecvd += pkt->len;
+    
+                // Print details about the received packet
+                printf("<- [Received DATA packet] ");
+                printPacketInfo(pkt, (struct sockaddr_storage *)&senderAddr);
+    
+                // TODO: save the data so the file can be reassembled later
+                size_t bytesWritten = fwrite(pkt->payload, 1, pkt->len, file);
+                if (bytesWritten != pkt->len) {
+                    fprintf(stderr, "Incomplete file write: %d bytes written", bytesWritten);
+                } else {
+                    fflush(file);
+                }
+            }
+    
+            // Handle END packet
+            if (pkt->type == 'E') {
+                printf("<- *** [Received END packet] ***");
+                double dt = difftime(time(NULL), startTime);
+                if (dt <= 1) dt = 1;
+    
+                // Print statistics
+                printf("\n---------------------------------------\n");
+                printf("Total packets recvd: %lu\n", numPacketsRecvd);
+                printf("Total payload bytes recvd: %lu\n", numBytesRecvd);
+                printf("Average packets/second: %d\n", (int)(numPacketsRecvd / dt));
+                printf("Duration of test: %f sec\n\n", dt);
+    
+                break;
+            }
+    
+        }
+        part = part->next_part;
     }
     free(pkt);
 
