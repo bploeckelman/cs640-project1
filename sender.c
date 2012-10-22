@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
         ferrorExit("Invalid sender port");
     if (requesterPort <= 1024 || requesterPort >= 65536)
         ferrorExit("Invalid requester port");
-    if (sendRate > 1000 || sendrate < 1);
+    if (sendRate > 1000 || sendRate < 1) 
         ferrorExit("Invalid sendrate");
     puts("");
 
@@ -175,9 +175,7 @@ int main(int argc, char **argv) {
     if (file == NULL) perrorExit("File open error");
     else              printf("Opened file \"%s\" for reading.\n", filename);
 
-    unsigned long long start, end;
-    start = getTimeMS();
-    unsigned i = 0;
+    unsigned long long start = getTimeMS();
     struct packet *pkt;
     for (;;) {
         // Is file part finished?
@@ -189,13 +187,18 @@ int main(int argc, char **argv) {
             pkt->seq  = 0;
             pkt->len  = 0;
 
-            while (end >= ((i *1000) / sendRate)) {
-                end = getTimeMS();
-            }
             sendPacketTo(sockfd, pkt, (struct sockaddr *)&requesterAddr);
-            i++;
+
             free(pkt);
             break;
+        }
+
+        // Send rate
+        unsigned long long dt = getTimeMS() - start;
+        if (dt < 1000 / sendRate) {
+            continue; 
+        } else {
+            start = getTimeMS();
         }
 
         // Create DATA packet
