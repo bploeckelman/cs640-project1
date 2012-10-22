@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
     bzero(&rhints, sizeof(struct addrinfo));
     rhints.ai_family   = AF_INET;
     rhints.ai_socktype = SOCK_DGRAM;
-    rhints.ai_flags    = 0;
+    rhints.ai_flags    = AI_PASSIVE;
 
     // Get the requester's address info
     struct addrinfo *requesterinfo;
@@ -113,14 +113,13 @@ int main(int argc, char **argv) {
     shints.ai_family   = AF_INET;
     shints.ai_socktype = SOCK_DGRAM;
     shints.ai_flags    = 0;
-
-    // Convert the sender's port # to a string
-    struct file_part *part = fileParts->parts;
     
     FILE *file = fopen("recvd.txt", "at");
     if (file == NULL) perrorExit("File open error");
     
+    struct file_part *part = fileParts->parts;
     while (part != NULL) {
+        // Convert the sender's port # to a string
         char senderPortStr[6] = "\0\0\0\0\0\0";
         sprintf(senderPortStr, "%d", part->sender_port);
     
@@ -216,7 +215,9 @@ int main(int argc, char **argv) {
                 // TODO: save the data so the file can be reassembled later
                 size_t bytesWritten = fprintf(file, "%s", pkt->payload);
                 if (bytesWritten != pkt->len) {
-                    fprintf(stderr, "Incomplete file write: %d bytes written", bytesWritten);
+                    fprintf(stderr,
+                        "Incomplete file write: %d bytes written, %lu pkt len",
+                        (int)bytesWritten, pkt->len);
                 } else {
                     fflush(file);
                 }

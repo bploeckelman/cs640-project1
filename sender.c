@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
     bzero(&shints, sizeof(struct addrinfo));
     shints.ai_family   = AF_INET;
     shints.ai_socktype = SOCK_DGRAM;
-    shints.ai_flags    = 0;//AI_PASSIVE;
+    shints.ai_flags    = AI_PASSIVE;
 
     // Get the sender's address info
     struct addrinfo *senderinfo;
@@ -118,13 +118,45 @@ int main(int argc, char **argv) {
     if (sp == NULL) perrorExit("Send socket creation failed");
     else            { printf("Sender socket: "); printNameInfo(sp); }
 
+    // -----------------------------===========================================
+    // REQUESTER ADDRESS INFO
+    struct addrinfo rhints;
+    bzero(&rhints, sizeof(struct addrinfo));
+    rhints.ai_family   = AF_INET;
+    rhints.ai_socktype = SOCK_DGRAM;
+    rhints.ai_flags    = 0;
+
+    struct addrinfo *requesterinfo;
+    errcode = getaddrinfo(NULL, reqPortStr, &rhints, &requesterinfo);
+    if (errcode != 0) {
+        fprintf(stderr, "requester getaddrinfo: %s\n", gai_strerror(errcode));
+        exit(EXIT_FAILURE);
+    }
+
+    // Loop through all the results of getaddrinfo and try to create a socket for requester
+    // NOTE: this is done so that we can find which of the getaddrinfo results is the requester
+    int requestsockfd;
+    struct addrinfo *rp;
+    for(rp = requesterinfo; rp != NULL; rp = rp->ai_next) {
+        requestsockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (requestsockfd == -1) {
+            perror("Socket error");
+            continue;
+        }
+
+        break;
+    }
+    if (sp == NULL) perrorExit("request socket creation failed");
+    else            { printf("requester socket: "); printNameInfo(rp); }
+    close(requestsockfd); // don't need this socket
+
     // ------------------------------------------------------------------------
     puts("Sender waiting for request packet...\n");
 
     // Setup the requester address 
-    struct sockaddr_storage requesterAddr;
-    bzero(&requesterAddr, sizeof(struct sockaddr_storage));
-    socklen_t len = sizeof(requesterAddr);
+    //struct sockaddr_storage requesterAddr;
+    //bzero(&requesterAddr, sizeof(struct sockaddr_storage));
+    //socklen_t len = sizeof(requesterAddr);
 
     // Receive and discard packets until a REQUEST packet arrives
     char *filename = NULL;
@@ -134,7 +166,8 @@ int main(int argc, char **argv) {
 
         // Receive a message
         size_t bytesRecvd = recvfrom(sockfd, msg, sizeof(struct packet), 0,
-            (struct sockaddr *)&requesterAddr, &len);
+            (struct sockaddr *)rp->ai_addr, &rp->ai_addrlen);
+//            (struct sockaddr *)&requesterAddr, &len);
         if (bytesRecvd == -1) {
             perror("Recvfrom error");
             fprintf(stderr, "Failed/incomplete receive: ignoring\n");
@@ -150,7 +183,7 @@ int main(int argc, char **argv) {
         if (pkt->type == 'R') {
             // Print some statistics for the recvd packet
             printf("<- [Received REQUEST]: ");
-            printPacketInfo(pkt, (struct sockaddr_storage *)&requesterAddr);
+            printPacketInfo(pkt, (struct sockaddr_storage *)rp->ai_addr);//&requesterAddr);
 
             // Grab a copy of the filename
             filename = strdup(pkt->payload);
@@ -187,7 +220,7 @@ int main(int argc, char **argv) {
             pkt->seq  = 0;
             pkt->len  = 0;
 
-            sendPacketTo(sockfd, pkt, (struct sockaddr *)&requesterAddr);
+            sendPacketTo(sockfd, pkt, (struct sockaddr *)rp->ai_addr);//&requesterAddr);
 
             free(pkt);
             break;
@@ -214,7 +247,7 @@ int main(int argc, char **argv) {
         memcpy(pkt->payload, buf, sizeof(buf));
 
         // Send the DATA packet to the requester 
-        sendPacketTo(sockfd, pkt, (struct sockaddr *)&requesterAddr);
+        sendPacketTo(sockfd, pkt, (struct sockaddr *)rp->ai_addr);//&requesterAddr);
 
         // Cleanup packets
         free(pkt);
