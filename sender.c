@@ -189,7 +189,7 @@ int main(int argc, char **argv) {
             pkt->seq  = 0;
             pkt->len  = 0;
 
-            while (end < ((i *1000) / sendRate)) {
+            while (end >= ((i *1000) / sendRate)) {
                 end = getTimeMS();
             }
             sendPacketTo(sockfd, pkt, (struct sockaddr *)&requesterAddr);
